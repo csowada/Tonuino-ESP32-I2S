@@ -4,6 +4,10 @@
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
 #define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
 
+// Use PN532 either MFRC522 as RFID reader module
+#define RFID_PN532
+// #define RFID_MFRC522
+
 #include <ESP32Encoder.h>
 #include "Arduino.h"
 #include <WiFi.h>
@@ -15,7 +19,15 @@
 #include "SD.h"
 #include "FS.h"
 #include "esp_task_wdt.h"
+
+#ifdef RFID_MFRC522
 #include <MFRC522.h>
+#endif
+
+#ifdef RFID_PN532
+    #include <Adafruit_PN532.h>
+#endif
+
 #include <Preferences.h>
 #ifdef MQTT_ENABLE
     #include <PubSubClient.h>
@@ -1450,7 +1462,7 @@ void playAudio(void *parameter) {
     vTaskDelete(NULL);
 }
 
-
+#ifdef RFID_MFRC522
 // Instructs RFID-scanner to scan for new RFID-tags
 void rfidScanner(void *parameter) {
     static MFRC522 mfrc522(RFID_CS, RST_PIN);
@@ -1512,7 +1524,93 @@ void rfidScanner(void *parameter) {
     }
     vTaskDelete(NULL);
 }
+#endif
 
+#ifdef RFID_PN532
+// Instructs RFID-scanner to scan for new RFID-tags
+void rfidScanner(void *parameter) {
+
+    // static Adafruit_PN532 nfc(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_CS);
+    static Adafruit_PN532 nfc(RFID_CS);
+
+    nfc.begin();
+
+    uint32_t versiondata = nfc.getFirmwareVersion();
+    if (! versiondata) {
+        Serial.print("Didn't find PN53x board");
+        while (1); // halt
+    }
+
+    // Got ok data, print it out!
+    Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
+    Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
+    Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
+
+    // configure board to read RFID tags
+    nfc.SAMConfig();
+
+    delay(4);
+    loggerNl((char *) FPSTR(rfidScannerReady), LOGLEVEL_DEBUG);
+    byte cardId[cardIdSize];
+    char *cardIdString;
+
+    byte uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
+    byte uidLast[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
+    byte uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
+    byte uidLastLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
+
+    for (;;) {
+        esp_task_wdt_reset();
+        vTaskDelay(10);
+        if ((millis() - lastRfidCheckTimestamp) >= 300) {
+            lastRfidCheckTimestamp = millis();
+            // Reset the loop if no new card is present on the sensor/reader. This saves the entire process when idle.
+
+            // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
+            // 'uid' will be populated with the UID, and uidLength will indicate
+            // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
+            if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength)) {
+                continue;
+            }
+
+            if(memcmp(uidLast, uid, sizeof(uid)) == 0 && uidLastLength > 0) {
+               Serial.println("EQ");
+               continue; 
+            }
+
+            memcpy(uidLast, uid, sizeof(uid));
+            uidLastLength = uidLength;
+
+            cardIdString = (char *) malloc(cardIdSize*3 +1);
+            if (cardIdString == NULL) {
+                logger((char *) FPSTR(unableToAllocateMem), LOGLEVEL_ERROR);
+                #ifdef NEOPIXEL_ENABLE
+                    showLedError = true;
+                #endif
+                continue;
+            }
+
+            uint8_t n = 0;
+            logger((char *) FPSTR(rfidTagDetected), LOGLEVEL_NOTICE);
+            for (uint8_t i=0; i<cardIdSize; i++) {
+                cardId[i] = uid[i];
+                snprintf(logBuf, sizeof(logBuf)/sizeof(logBuf[0]), "%02x", cardId[i]);
+                logger(logBuf, LOGLEVEL_NOTICE);
+
+                n += snprintf (&cardIdString[n], sizeof(cardIdString) / sizeof(cardIdString[0]), "%03d", cardId[i]);
+                if (i<(cardIdSize-1)) {
+                    logger("-", LOGLEVEL_NOTICE);
+                } else {
+                    logger("\n", LOGLEVEL_NOTICE);
+                }
+            }
+            xQueueSend(rfidCardQueue, &cardIdString, 0);
+            free(cardIdString);
+        }
+    }
+    vTaskDelete(NULL);
+}
+#endif
 
 // This task handles everything for Neopixel-visualisation
 #ifdef NEOPIXEL_ENABLE
