@@ -1546,6 +1546,8 @@ void rfidScanner(void *parameter) {
     Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
     Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
 
+    nfc.setPassiveActivationRetries(0x10);
+
     // configure board to read RFID tags
     nfc.SAMConfig();
 
@@ -1562,14 +1564,16 @@ void rfidScanner(void *parameter) {
     for (;;) {
         esp_task_wdt_reset();
         vTaskDelay(10);
-        if ((millis() - lastRfidCheckTimestamp) >= 300) {
+        if ((millis() - lastRfidCheckTimestamp) >= 30) {
             lastRfidCheckTimestamp = millis();
             // Reset the loop if no new card is present on the sensor/reader. This saves the entire process when idle.
 
             // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
             // 'uid' will be populated with the UID, and uidLength will indicate
             // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
-            if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength)) {
+            if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 1000)) {
+                if(uidLastLength > 0)
+                    uidLastLength = 0; 
                 continue;
             }
 
