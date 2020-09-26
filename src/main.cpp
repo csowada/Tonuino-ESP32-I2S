@@ -1,6 +1,6 @@
 // Define modules to compile:
-#define MQTT_ENABLE
-#define FTP_ENABLE
+//#define MQTT_ENABLE
+//#define FTP_ENABLE
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
 #define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
 // #define ROTARY_SWITCH_ENABLE
@@ -20,6 +20,11 @@
 #include "SD.h"
 #include "FS.h"
 #include "esp_task_wdt.h"
+
+// #include "WiFi.h" 
+#include "driver/adc.h"
+#include <esp_wifi.h>
+#include <esp_bt.h>
 
 #ifdef RFID_MFRC522
 #include <MFRC522.h>
@@ -58,24 +63,24 @@
 #define LOGLEVEL_DEBUG                  4           // almost everything
 
 // Serial-logging-configuration
-const uint8_t serialDebug = LOGLEVEL_INFO;          // Current loglevel for serial console
+const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for serial console
 
 // Serial-logging buffer
 char logBuf[160];                                   // Buffer for all log-messages
 
 // GPIOs (uSD card-reader)
-#define SPISD_CS                        15
-#define SPISD_MOSI                      13
-#define SPISD_MISO                      16          // 12 doesn't work with Lolin32-devBoard: uC doesn't start if put HIGH at start
-#define SPISD_SCK                       14
+#define SPISD_CS                        5
+#define SPISD_MOSI                      23
+#define SPISD_MISO                      19          // 12 doesn't work with Lolin32-devBoard: uC doesn't start if put HIGH at start
+#define SPISD_SCK                       18
 
 // GPIOs (RFID-readercurrentRfidTagId)
-#define RST_PIN                         22
-#define RFID_CS                         21
+#define RST_PIN                         31
+#define RFID_CS                         15
 #define RFID_MOSI                       23
 #define RFID_MISO                       19
 #define RFID_SCK                        18
-
+#define RFID_IRQ                        22
 // GPIOs (DAC)
 #define I2S_DOUT                        25
 #define I2S_BCLK                        27
@@ -92,16 +97,16 @@ char logBuf[160];                                   // Buffer for all log-messag
 #endif
 
 // GPIOs (Control-buttons)
-#define PAUSEPLAY_BUTTON                5
-#define NEXT_BUTTON                     4
+#define PAUSEPLAY_BUTTON                34
+#define NEXT_BUTTON                     13 //32
 #define PREVIOUS_BUTTON                 33
 
 // GPIOs (LEDs)
-#define LED_PIN                         12
+#define LED_PIN                         4
 
 // Neopixel-configuration
 #ifdef NEOPIXEL_ENABLE
-    #define NUM_LEDS                    24          // number of LEDs
+    #define NUM_LEDS                    16          // number of LEDs
     #define CHIPSET                     WS2812B     // type of Neopixel
     #define COLOR_ORDER                 GRB
 #endif
@@ -243,6 +248,7 @@ IPAddress apIP(192, 168, 4, 1);                         // Access-point's static
 IPAddress apNetmask(255, 255, 255, 0);                  // Access-point's netmask
 bool accessPointStarted = false;
 
+bool enableWifi = true;
 
 // MQTT-configuration
 char mqtt_server[16] = "192.168.2.43";                  // IP-address of MQTT-server (if not found in NVS this one will be taken)
@@ -284,7 +290,7 @@ static const char restartWebsite[] PROGMEM = "<p>Der Tonuino wird neu gestartet.
 
 
 // Audio/mp3
-SPIClass spiSD(HSPI);
+SPIClass spiSD(VSPI);
 TaskHandle_t mp3Play;
 TaskHandle_t rfid;
 #ifdef NEOPIXEL_ENABLE
@@ -307,7 +313,7 @@ IPAddress myIP;
 
 // Rotary encoder-configuration
 #ifdef ROTARY_SWITCH_ENABLE
-ESP32Encoder encoder;
+    ESP32Encoder encoder;
 #endif
 
 // HW-Timer
@@ -325,7 +331,7 @@ typedef struct {
 } t_button;
 
 #ifdef ROTARY_SWITCH_ENABLE
-t_button buttons[4];
+    t_button buttons[4];
 #else
     t_button buttons[3];
 #endif
@@ -462,11 +468,20 @@ void buttonHandler() {
             return;
         }
         unsigned long currentTimestamp = millis();
-        buttons[0].currentState = digitalRead(NEXT_BUTTON);
+
+        uint16_t tv = touchRead(NEXT_BUTTON);
+
+        // Serial.print(tv, DEC);
+        // Serial.print('_');
+
+        buttons[0].currentState = (tv > 20);
+        // buttons[0].currentState = digitalRead(NEXT_BUTTON);
         buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
         buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
-        buttons[3].currentState = digitalRead(DREHENCODER_BUTTON);
 
+#ifdef ROTARY_SWITCH_ENABLE
+        buttons[3].currentState = digitalRead(DREHENCODER_BUTTON);
+#endif
         // Iterate over all buttons in struct-array
         for (uint8_t i=0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
             if (buttons[i].currentState != buttons[i].lastState && currentTimestamp - buttons[i].lastPressedTimestamp > buttonDebounceInterval) {
@@ -3236,20 +3251,22 @@ void setup() {
         1 /* Core where the task should run */
     );
 
-
+#ifdef ROTARY_ENCODER_ENABLED
     esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
-
+#endif
     // Activate internal pullups for all buttons
-    pinMode(DREHENCODER_BUTTON, INPUT_PULLUP);
     pinMode(PAUSEPLAY_BUTTON, INPUT_PULLUP);
-    pinMode(NEXT_BUTTON, INPUT_PULLUP);
+    // pinMode(NEXT_BUTTON, INPUT_PULLUP);
+    pinMode(NEXT_BUTTON, INPUT);
     pinMode(PREVIOUS_BUTTON, INPUT_PULLUP);
 
+#ifdef ROTARY_SWITCH_ENABLE
+    pinMode(DREHENCODER_BUTTON, INPUT_PULLUP);
     // Init rotary encoder
     encoder.attachHalfQuad(DREHENCODER_CLK, DREHENCODER_DT);
     encoder.clearCount();
     encoder.setCount(initVolume*2);         // Ganzes Raster ist immer +2, daher initiale Lautstärke mit 2 multiplizieren
-
+#endif
     // Only enable MQTT if requested
     #ifdef MQTT_ENABLE
         if (enableMqtt) {
@@ -3258,7 +3275,18 @@ void setup() {
         }
     #endif
 
+    if (enableWifi) {
     wifiManager();
+    } else {
+        Serial.println("NO WIFI ...");
+        WiFi.disconnect(true, true);
+        // // WiFi.mode(WIFI_MODE_NULL);
+        // btStop();
+
+        // adc_power_off();
+        // // esp_wifi_stop();
+        // esp_bt_controller_disable();
+    }
 
     lastTimeActiveTimestamp = millis();     // initial set after boot
 
