@@ -3,6 +3,7 @@
 #define FTP_ENABLE
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
 #define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
+// #define ROTARY_SWITCH_ENABLE
 
 // Use PN532 either MFRC522 as RFID reader module
 #define RFID_PN532
@@ -84,9 +85,11 @@ char logBuf[160];                                   // Buffer for all log-messag
 #define POWER                           17
 
 // GPIOs (Rotary encoder)
-#define DREHENCODER_CLK                 34
-#define DREHENCODER_DT                  35
-#define DREHENCODER_BUTTON              32
+#ifdef ROTARY_SWITCH_ENABLE
+    #define DREHENCODER_CLK                 12
+    #define DREHENCODER_DT                  14
+    #define DREHENCODER_BUTTON              35
+#endif
 
 // GPIOs (Control-buttons)
 #define PAUSEPLAY_BUTTON                5
@@ -303,7 +306,9 @@ IPAddress myIP;
 #endif
 
 // Rotary encoder-configuration
+#ifdef ROTARY_SWITCH_ENABLE
 ESP32Encoder encoder;
+#endif
 
 // HW-Timer
 hw_timer_t *timer = NULL;
@@ -318,7 +323,12 @@ typedef struct {
     unsigned long lastPressedTimestamp;
     unsigned long lastReleasedTimestamp;
 } t_button;
+
+#ifdef ROTARY_SWITCH_ENABLE
 t_button buttons[4];
+#else
+    t_button buttons[3];
+#endif
 
 Preferences prefsRfid;
 Preferences prefsSettings;
@@ -1974,6 +1984,7 @@ void trackControlToQueueSender(const uint8_t trackCommand) {
 
 // Handles volume directed by rotary encoder
 void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume) {
+#ifdef ROTARY_ENCODER_ENABLED
     if (lockControls) {
         encoder.clearCount();
         encoder.setCount(currentVolume*2);
@@ -2002,6 +2013,7 @@ void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume) {
             volumeToQueueSender(currentVolume);
         }
     }
+#endif
 }
 
 
