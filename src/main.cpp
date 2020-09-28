@@ -1,9 +1,10 @@
 // Define modules to compile:
 //#define MQTT_ENABLE
-//#define FTP_ENABLE
+#define FTP_ENABLE
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
 #define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
 // #define ROTARY_SWITCH_ENABLE
+#define AC101_ENBALED
 
 // Use PN532 either MFRC522 as RFID reader module
 #define RFID_PN532
@@ -16,22 +17,30 @@
     #include "ESP32FtpServer.h"
 #endif
 #include "Audio.h"
+#ifdef AC101_ENBALED
+    #include "AC101.h" //https://github.com/Yveaux/AC101
+#endif
 #include "SPI.h"
 #include "SD.h"
 #include "FS.h"
+#include "Wire.h"
 #include "esp_task_wdt.h"
 
 // #include "WiFi.h" 
-#include "driver/adc.h"
-#include <esp_wifi.h>
-#include <esp_bt.h>
+// #include "driver/adc.h"
+// #include <esp_wifi.h>
+// #include <esp_bt.h>
 
 #ifdef RFID_MFRC522
 #include <MFRC522.h>
 #endif
 
 #ifdef RFID_PN532
-    #include <Adafruit_PN532.h>
+    // #include <PN532/PN532/PN532.h>
+    // #include <PN532/PN532_HSU/PN532_HSU.h>
+    // #include <NfcAdapter.h>
+
+    #include <PN532.h>
 #endif
 
 #include <Preferences.h>
@@ -69,25 +78,32 @@ const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for ser
 char logBuf[160];                                   // Buffer for all log-messages
 
 // GPIOs (uSD card-reader)
-#define SPISD_CS                        5
-#define SPISD_MOSI                      23
-#define SPISD_MISO                      19          // 12 doesn't work with Lolin32-devBoard: uC doesn't start if put HIGH at start
-#define SPISD_SCK                       18
+#define SPISD_CS                        13
+#define SPISD_MOSI                      15
+#define SPISD_MISO                      2          // 12 doesn't work with Lolin32-devBoard: uC doesn't start if put HIGH at start
+#define SPISD_SCK                       14
 
 // GPIOs (RFID-readercurrentRfidTagId)
-#define RST_PIN                         31
-#define RFID_CS                         15
-#define RFID_MOSI                       23
-#define RFID_MISO                       19
-#define RFID_SCK                        18
-#define RFID_IRQ                        22
+// #define RST_PIN                         31
+// #define RFID_CS                         15
+// #define RFID_MOSI                       23
+// #define RFID_MISO                       19
+// #define RFID_SCK                        18
+// #define RFID_IRQ                        22
+
 // GPIOs (DAC)
 #define I2S_DOUT                        25
 #define I2S_BCLK                        27
 #define I2S_LRC                         26
 
+#ifdef AC101_ENBALED
+    #define HEADPHONE_DETECT_PIN 39
+    #define IIC_CLK 32
+    #define IIC_DATA 33
+#endif
+
 // GPIO used to trigger transistor-circuit / RFID-reader
-#define POWER                           17
+#define POWER                           21
 
 // GPIOs (Rotary encoder)
 #ifdef ROTARY_SWITCH_ENABLE
@@ -97,12 +113,12 @@ char logBuf[160];                                   // Buffer for all log-messag
 #endif
 
 // GPIOs (Control-buttons)
-#define PAUSEPLAY_BUTTON                34
-#define NEXT_BUTTON                     13 //32
-#define PREVIOUS_BUTTON                 33
+#define PAUSEPLAY_BUTTON                19
+#define NEXT_BUTTON                     22
+#define PREVIOUS_BUTTON                 0
 
 // GPIOs (LEDs)
-#define LED_PIN                         4
+#define LED_PIN                         23
 
 // Neopixel-configuration
 #ifdef NEOPIXEL_ENABLE
@@ -144,7 +160,9 @@ char logBuf[160];                                   // Buffer for all log-messag
 #define SLEEP_AFTER_5_TRACKS            107         // Puts uC into deepsleep after five tracks
 #define REPEAT_PLAYLIST                 110         // Changes active playmode to endless-loop (for a playlist)
 #define REPEAT_TRACK                    111         // Changes active playmode to endless-loop (for a single track)
-#define DIMM_LEDS_NIGHTMODE             120         // Changes LED-brightness
+#define DIMM_LEDS_NIGHTMODE             112         // Changes LED-brightness
+#define VOLUME_DECREASE                 113         // Lautstärke leiser
+#define VOLUME_INCREASE                 114         // Lautstärke lauter
 
 // Repeat-Modes
 #define NO_REPEAT                       0
@@ -290,6 +308,9 @@ static const char restartWebsite[] PROGMEM = "<p>Der Tonuino wird neu gestartet.
 
 
 // Audio/mp3
+#ifdef AC101_ENBALED
+    AC101 ac;
+#endif
 SPIClass spiSD(VSPI);
 TaskHandle_t mp3Play;
 TaskHandle_t rfid;
@@ -346,6 +367,10 @@ QueueHandle_t trackQueue;
 QueueHandle_t trackControlQueue;
 QueueHandle_t rfidCardQueue;
 
+// PN532_HSU pn532hsu(Serial1);
+// PN532 nfc(pn532hsu);
+
+PN532 nfc;
 
 // Prototypes
 void accessPointStart(const char *SSID, IPAddress ip, IPAddress netmask);
@@ -469,13 +494,13 @@ void buttonHandler() {
         }
         unsigned long currentTimestamp = millis();
 
-        uint16_t tv = touchRead(NEXT_BUTTON);
+        // uint16_t tv = touchRead(NEXT_BUTTON);
 
         // Serial.print(tv, DEC);
         // Serial.print('_');
 
-        buttons[0].currentState = (tv > 20);
-        // buttons[0].currentState = digitalRead(NEXT_BUTTON);
+        // buttons[0].currentState = (tv > 20);
+        buttons[0].currentState = digitalRead(NEXT_BUTTON);
         buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
         buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
 
@@ -512,7 +537,8 @@ void doButtonActions(void) {
                     switch (i)      // Long-press-actions
                     {
                     case 0:
-                        trackControlToQueueSender(LASTTRACK);
+                        volumeToQueueSender(currentVolume++);
+                        // trackControlToQueueSender(LASTTRACK);
                         buttons[i].isPressed = false;
                         break;
 
@@ -522,7 +548,8 @@ void doButtonActions(void) {
                         break;
 
                     case 2:
-                        trackControlToQueueSender(PAUSEPLAY);
+                        volumeToQueueSender(currentVolume--);
+                        // trackControlToQueueSender(PAUSEPLAY);
                         buttons[i].isPressed = false;
                         break;
 
@@ -1143,12 +1170,40 @@ size_t nvsRfidWriteWrapper (const char *_rfidCardId, const char *_track, const u
     return prefsRfid.putString(_rfidCardId, prefBuf);
 }
 
+bool isHeadphoneDetected()
+{
+    return !digitalRead(HEADPHONE_DETECT_PIN);
+}
 
 // Function to play music as task
 void playAudio(void *parameter) {
     static Audio audio;
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+
+
+#ifdef AC101_ENBALED
+    Serial.printf("Connect to AC101 codec... ");
+    while (not ac.begin(IIC_DATA, IIC_CLK))
+    {
+        Serial.printf("Failed!\n");
+        delay(1000);
+    }
+    Serial.printf("OK\n");
+
+    if(isHeadphoneDetected())
+    {
+        ac.SetVolumeSpeaker(0);
+        ac.SetVolumeHeadphone(initVolume*3);  
+    } else {
+        ac.SetVolumeSpeaker(initVolume*3);
+        ac.SetVolumeHeadphone(0);
+    }
+    audio.setVolume(11);
+
+    // ac.DumpRegisters();
+#else
     audio.setVolume(initVolume);
+#endif
 
     uint8_t currentVolume;
     static BaseType_t trackQStatus;
@@ -1158,7 +1213,21 @@ void playAudio(void *parameter) {
         if (xQueueReceive(volumeQueue, &currentVolume, 0) == pdPASS ) {
             snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%s: %d", (char *) FPSTR(newLoudnessReceivedQueue), currentVolume);
             loggerNl(logBuf, LOGLEVEL_INFO);
-            audio.setVolume(currentVolume);
+
+            #ifdef AC101_ENBALED
+                if(isHeadphoneDetected())
+                {
+                    ac.SetVolumeSpeaker(0);
+                    ac.SetVolumeHeadphone(currentVolume*3);  
+                } else {
+                    ac.SetVolumeSpeaker(currentVolume*3);
+                    ac.SetVolumeHeadphone(0);
+                }
+            #else
+                audio.setVolume(currentVolume);
+            #endif
+
+            
             #ifdef MQTT_ENABLE
                 publishMqtt((char *) FPSTR(topicLoudnessState), currentVolume, false);
             #endif
@@ -1555,56 +1624,43 @@ void rfidScanner(void *parameter) {
 // Instructs RFID-scanner to scan for new RFID-tags
 void rfidScanner(void *parameter) {
 
-    // static Adafruit_PN532 nfc(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_CS);
-    static Adafruit_PN532 nfc(RFID_CS);
-
-    nfc.begin();
-
-    uint32_t versiondata = nfc.getFirmwareVersion();
-    if (! versiondata) {
-        Serial.print("Didn't find PN53x board");
-        while (1); // halt
-    }
-
-    // Got ok data, print it out!
-    Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
-    Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
-    Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
-
-    nfc.setPassiveActivationRetries(0x10);
-
-    // configure board to read RFID tags
-    nfc.SAMConfig();
-
-    delay(4);
-    loggerNl((char *) FPSTR(rfidScannerReady), LOGLEVEL_DEBUG);
     byte cardId[cardIdSize];
     char *cardIdString;
 
     byte uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
     byte uidLast[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
     byte uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
-    byte uidLastLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
+    byte uidLastLength = 0;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
 
     for (;;) {
         esp_task_wdt_reset();
         vTaskDelay(10);
-        if ((millis() - lastRfidCheckTimestamp) >= 30) {
+        if ((millis() - lastRfidCheckTimestamp) >= 300) {
             lastRfidCheckTimestamp = millis();
             // Reset the loop if no new card is present on the sensor/reader. This saves the entire process when idle.
 
             // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
             // 'uid' will be populated with the UID, and uidLength will indicate
             // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
-            if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 1000)) {
+            // if (!nfc.ReadPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 200)) {
+
+            eCardType e_CardType;
+
+            if (!nfc.ReadPassiveTargetID(uid, &uidLength, &e_CardType)) {
+                Serial.print(";");
                 if(uidLastLength > 0)
                     uidLastLength = 0; 
                 continue;
             }
 
+            // not a valid uid length, no card
+            if (uidLength < 4) {
+                continue; 
+            }
+
             if(memcmp(uidLast, uid, sizeof(uid)) == 0 && uidLastLength > 0) {
-               Serial.println("EQ");
-               continue; 
+                Serial.println("EQ");
+                continue; 
             }
 
             memcpy(uidLast, uid, sizeof(uid));
@@ -1637,6 +1693,7 @@ void rfidScanner(void *parameter) {
             free(cardIdString);
         }
     }
+    logger("rfid task died!", LOGLEVEL_INFO);
     vTaskDelete(NULL);
 }
 #endif
@@ -2547,6 +2604,21 @@ void doRfidCardModifications(const uint32_t mod) {
             #endif
             break;
 
+
+        case VOLUME_DECREASE:
+            volumeToQueueSender(currentVolume--);
+            #ifdef NEOPIXEL_ENABLE
+                showLedError = true;
+            #endif
+            break;
+
+        case VOLUME_INCREASE:
+            volumeToQueueSender(currentVolume++);
+            #ifdef NEOPIXEL_ENABLE
+                showLedError = true;
+            #endif
+            break;
+            
         default:
             snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%s %d !", (char *) FPSTR(modificatorDoesNotExist), mod);
             loggerNl(logBuf, LOGLEVEL_ERROR);
@@ -3036,12 +3108,57 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
     }
 }
 
+void IRAM_ATTR onHeadphoneDetect()
+{
+    Serial.println("HEADPHONE DETECTED ?");
+    volumeToQueueSender(currentVolume);
+}
 
 void setup() {
     Serial.begin(115200);
     srand(esp_random());
     pinMode(POWER, OUTPUT);
     digitalWrite(POWER, HIGH);
+
+    // nfc.InitI2C(0);
+    // nfc.SetDebugLevel(2);
+    nfc.begin();
+    delay(100);
+
+    // uint32_t versiondata = nfc.GetFirmwareVersion();
+    // if (! versiondata) {
+    //     Serial.print("Didn't find PN53x board");
+    //     while (1); // halt
+    // }
+
+    // // Got ok data, print it out!
+    // Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
+    // Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
+    // Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
+
+    // nfc.setPassiveActivationRetries(0xFE);
+
+    // Set the max number of retry attempts to read from a card.
+    // This prevents us from waiting forever for a card, which is the default behaviour of the PN532.
+    if (!nfc.SetPassiveActivationRetries())
+    {
+        Serial.print("SetPassiveActivationRetries error!");
+        while (1); // halt
+    }
+
+    // configure board to read RFID tags
+    if (!nfc.SamConfig())
+    {
+        Serial.println("Unable to write PN532 config");
+        while (1); // halt
+    }
+
+    delay(4);
+    loggerNl((char *) FPSTR(rfidScannerReady), LOGLEVEL_DEBUG);
+
+
+
+
     prefsRfid.begin((char *) FPSTR(prefsRfidNamespace));
     prefsSettings.begin((char *) FPSTR(prefsSettingsNamespace));
 
@@ -3090,6 +3207,9 @@ void setup() {
         loggerNl((char *) FPSTR(unableToMountSd), LOGLEVEL_ERROR);
         delay(500);
     }
+
+    pinMode(HEADPHONE_DETECT_PIN, INPUT);
+    attachInterrupt(HEADPHONE_DETECT_PIN, &onHeadphoneDetect, CHANGE);
 
     // Create queues
     volumeQueue = xQueueCreate(1, sizeof(int));
@@ -3230,6 +3350,14 @@ void setup() {
     timerAlarmWrite(timer, 1000, true);         // 1000 Hz
     timerAlarmEnable(timer);
 
+
+
+
+
+
+
+
+
     // Create tasks
     xTaskCreatePinnedToCore(
         rfidScanner, /* Function to implement the task */
@@ -3276,7 +3404,7 @@ void setup() {
     #endif
 
     if (enableWifi) {
-    wifiManager();
+        wifiManager();
     } else {
         Serial.println("NO WIFI ...");
         WiFi.disconnect(true, true);
