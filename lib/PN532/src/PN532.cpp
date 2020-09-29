@@ -671,15 +671,7 @@ bool PN532::IsReady()
         return u8_Ready == PN532_I2C_READY; // 0x01
     }
     #elif USE_HARDWARE_UART
-        // byte u8_Ready = HsuClass::Read();
-        // if (mu8_DebugLevel > 1)
-        // {
-        //     Utils::Print("IsReady(): read ");
-        //     Utils::PrintHex8(u8_Ready, LF);
-        // }   
-        // return u8_Ready == PN532_I2C_READY; // 0x01
         return HsuClass::Available() > 0;
-        // return HsuClass::Read() >= 0;
     #endif
 }
 
@@ -793,8 +785,6 @@ void PN532::SendPacket(byte* buff, byte len)
     #elif USE_HARDWARE_UART
     {
         Utils::DelayMilli(2); // delay is for waking up the board
-
-
 
         for (byte i=0; i<len; i++) 
         {

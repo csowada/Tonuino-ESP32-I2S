@@ -1,6 +1,6 @@
 // Define modules to compile:
 //#define MQTT_ENABLE
-#define FTP_ENABLE
+// #define FTP_ENABLE
 #define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
 #define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
 // #define ROTARY_SWITCH_ENABLE
@@ -10,7 +10,13 @@
 #define RFID_PN532
 // #define RFID_MFRC522
 
-#include <ESP32Encoder.h>
+// AC101 Stero Downmix Setting
+// 0xfbb6
+
+#ifdef ROTARY_SWITCH_ENABLE
+    #include <ESP32Encoder.h>
+#endif
+
 #include "Arduino.h"
 #include <WiFi.h>
 #ifdef FTP_ENABLE
@@ -113,9 +119,9 @@ char logBuf[160];                                   // Buffer for all log-messag
 #endif
 
 // GPIOs (Control-buttons)
-#define PAUSEPLAY_BUTTON                19
-#define NEXT_BUTTON                     22
-#define PREVIOUS_BUTTON                 0
+#define PAUSEPLAY_BUTTON                0
+#define NEXT_BUTTON                     18
+#define PREVIOUS_BUTTON                 5
 
 // GPIOs (LEDs)
 #define LED_PIN                         23
@@ -1199,7 +1205,7 @@ void playAudio(void *parameter) {
         ac.SetVolumeHeadphone(0);
     }
     audio.setVolume(11);
-
+// ac.SetMode
     // ac.DumpRegisters();
 #else
     audio.setVolume(initVolume);
@@ -1647,14 +1653,17 @@ void rfidScanner(void *parameter) {
             eCardType e_CardType;
 
             if (!nfc.ReadPassiveTargetID(uid, &uidLength, &e_CardType)) {
-                Serial.print(";");
-                if(uidLastLength > 0)
-                    uidLastLength = 0; 
+                Serial.print("-");
+                // if(uidLastLength > 0)
+                //     uidLastLength = 0; 
                 continue;
             }
 
             // not a valid uid length, no card
             if (uidLength < 4) {
+                Serial.print(":");
+                if(uidLastLength > 0)
+                    uidLastLength = 0; 
                 continue; 
             }
 
@@ -3116,14 +3125,17 @@ void IRAM_ATTR onHeadphoneDetect()
 
 void setup() {
     Serial.begin(115200);
+    Serial.println("\r\nReset");
+    Serial.printf_P(PSTR("Free mem=%d\n"), ESP.getFreeHeap());
+
+    // nfc.InitI2C(0);
+    // nfc.SetDebugLevel(3);
+
+    delay(10);
+
     srand(esp_random());
     pinMode(POWER, OUTPUT);
     digitalWrite(POWER, HIGH);
-
-    // nfc.InitI2C(0);
-    // nfc.SetDebugLevel(2);
-    nfc.begin();
-    delay(100);
 
     // uint32_t versiondata = nfc.GetFirmwareVersion();
     // if (! versiondata) {
@@ -3138,23 +3150,6 @@ void setup() {
 
     // nfc.setPassiveActivationRetries(0xFE);
 
-    // Set the max number of retry attempts to read from a card.
-    // This prevents us from waiting forever for a card, which is the default behaviour of the PN532.
-    if (!nfc.SetPassiveActivationRetries())
-    {
-        Serial.print("SetPassiveActivationRetries error!");
-        while (1); // halt
-    }
-
-    // configure board to read RFID tags
-    if (!nfc.SamConfig())
-    {
-        Serial.println("Unable to write PN532 config");
-        while (1); // halt
-    }
-
-    delay(4);
-    loggerNl((char *) FPSTR(rfidScannerReady), LOGLEVEL_DEBUG);
 
 
 
@@ -3354,7 +3349,24 @@ void setup() {
 
 
 
+    nfc.begin();
+    // Set the max number of retry attempts to read from a card.
+    // This prevents us from waiting forever for a card, which is the default behaviour of the PN532.
+    while (!nfc.SetPassiveActivationRetries())
+    {
+        Serial.print("SetPassiveActivationRetries error!");
+        // while (1); // halt
+    }
 
+    // configure board to read RFID tags
+    if (!nfc.SamConfig())
+    {
+        Serial.println("Unable to write PN532 config");
+        while (1); // halt
+    }
+
+    delay(4);
+    loggerNl((char *) FPSTR(rfidScannerReady), LOGLEVEL_DEBUG);
 
 
 
@@ -3385,7 +3397,7 @@ void setup() {
     // Activate internal pullups for all buttons
     pinMode(PAUSEPLAY_BUTTON, INPUT_PULLUP);
     // pinMode(NEXT_BUTTON, INPUT_PULLUP);
-    pinMode(NEXT_BUTTON, INPUT);
+    pinMode(NEXT_BUTTON, INPUT_PULLUP);
     pinMode(PREVIOUS_BUTTON, INPUT_PULLUP);
 
 #ifdef ROTARY_SWITCH_ENABLE
