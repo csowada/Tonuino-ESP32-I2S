@@ -1,17 +1,4 @@
-// Define modules to compile:
-//#define MQTT_ENABLE
-// #define FTP_ENABLE
-#define NEOPIXEL_ENABLE             // Don't forget configuration of NUM_LEDS
-#define NEOPIXEL_REVERSE_ROTATION   // Some Neopixels are adressed/soldered counter-clockwise. This can be configured here.
-// #define ROTARY_SWITCH_ENABLE
-#define AC101_ENBALED
-
-// Use PN532 either MFRC522 as RFID reader module
-#define RFID_PN532
-// #define RFID_MFRC522
-
-// AC101 Stero Downmix Setting
-// 0xfbb6
+#include "consts.h"
 
 #ifdef ROTARY_SWITCH_ENABLE
     #include <ESP32Encoder.h>
@@ -22,10 +9,9 @@
 #ifdef FTP_ENABLE
     #include "ESP32FtpServer.h"
 #endif
+
 #include "Audio.h"
-#ifdef AC101_ENBALED
-    #include "AC101.h" //https://github.com/Yveaux/AC101
-#endif
+
 #include "SPI.h"
 #include "SD.h"
 #include "FS.h"
@@ -33,20 +19,17 @@
 #include "esp_task_wdt.h"
 
 // #include "WiFi.h" 
-// #include "driver/adc.h"
-// #include <esp_wifi.h>
-// #include <esp_bt.h>
+#include "driver/adc.h"
+#include <esp_wifi.h>
+#include <esp_bt.h>
 
 #ifdef RFID_MFRC522
 #include <MFRC522.h>
 #endif
 
 #ifdef RFID_PN532
-    // #include <PN532/PN532/PN532.h>
-    // #include <PN532/PN532_HSU/PN532_HSU.h>
-    // #include <NfcAdapter.h>
-
-    #include <PN532.h>
+    #include <PN532/PN532/PN532.h>
+    #include <PN532/PN532_HSU/PN532_HSU.h>
 #endif
 
 #include <Preferences.h>
@@ -54,9 +37,9 @@
     #include <PubSubClient.h>
 #endif
 #include <WebServer.h>
-#ifdef NEOPIXEL_ENABLE
-    #include <FastLED.h>
-#endif
+// #ifdef NEOPIXEL_ENABLE
+//     #include <FastLED.h>
+// #endif
 #include "logmessages.h"
 #include "websiteMgmt.h"
 #include "websiteBasic.h"
@@ -65,17 +48,8 @@
 #include <ArduinoJson.h>
 #include <nvsDump.h>
 
-
-
-// Info-docs:
-// https://docs.aws.amazon.com/de_de/freertos-kernel/latest/dg/queue-management.html
-// https://arduino-esp8266.readthedocs.io/en/latest/PROGMEM.html#how-do-i-declare-a-global-flash-string-and-use-it
-
-// Loglevels
-#define LOGLEVEL_ERROR                  1           // only errors
-#define LOGLEVEL_NOTICE                 2           // errors + important messages
-#define LOGLEVEL_INFO                   3           // infos + errors + important messages
-#define LOGLEVEL_DEBUG                  4           // almost everything
+#include "led.h"
+#include "utils.h"
 
 // Serial-logging-configuration
 const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for serial console
@@ -83,130 +57,7 @@ const uint8_t serialDebug = LOGLEVEL_DEBUG;          // Current loglevel for ser
 // Serial-logging buffer
 char logBuf[160];                                   // Buffer for all log-messages
 
-// GPIOs (uSD card-reader)
-#define SPISD_CS                        13
-#define SPISD_MOSI                      15
-#define SPISD_MISO                      2          // 12 doesn't work with Lolin32-devBoard: uC doesn't start if put HIGH at start
-#define SPISD_SCK                       14
-
-// GPIOs (RFID-readercurrentRfidTagId)
-// #define RST_PIN                         31
-// #define RFID_CS                         15
-// #define RFID_MOSI                       23
-// #define RFID_MISO                       19
-// #define RFID_SCK                        18
-// #define RFID_IRQ                        22
-
-// GPIOs (DAC)
-#define I2S_DOUT                        25
-#define I2S_BCLK                        27
-#define I2S_LRC                         26
-
-#ifdef AC101_ENBALED
-    #define HEADPHONE_DETECT_PIN 39
-    #define IIC_CLK 32
-    #define IIC_DATA 33
-#endif
-
-// GPIO used to trigger transistor-circuit / RFID-reader
-#define POWER                           21
-
-// GPIOs (Rotary encoder)
-#ifdef ROTARY_SWITCH_ENABLE
-    #define DREHENCODER_CLK                 12
-    #define DREHENCODER_DT                  14
-    #define DREHENCODER_BUTTON              35
-#endif
-
-// GPIOs (Control-buttons)
-#define PAUSEPLAY_BUTTON                0
-#define NEXT_BUTTON                     18
-#define PREVIOUS_BUTTON                 5
-
-// GPIOs (LEDs)
-#define LED_PIN                         23
-
-// Neopixel-configuration
-#ifdef NEOPIXEL_ENABLE
-    #define NUM_LEDS                    16          // number of LEDs
-    #define CHIPSET                     WS2812B     // type of Neopixel
-    #define COLOR_ORDER                 GRB
-#endif
-
-// Track-Control
-#define STOP                            1           // Stop play
-#define PLAY                            2           // Start play (currently not used)
-#define PAUSEPLAY                       3           // Pause/play
-#define NEXTTRACK                       4           // Next track of playlist
-#define PREVIOUSTRACK                   5           // Previous track of playlist
-#define FIRSTTRACK                      6           // First track of playlist
-#define LASTTRACK                       7           // Last track of playlist
-
-// Playmodes
-#define NO_PLAYLIST                     0           // If no playlist is active
-#define SINGLE_TRACK                    1           // Play a single track
-#define SINGLE_TRACK_LOOP               2           // Play a single track in infinite-loop
-#define AUDIOBOOK                       3           // Single track, can save last play-position
-#define AUDIOBOOK_LOOP                  4           // Single track as infinite-loop, can save last play-position
-#define ALL_TRACKS_OF_DIR_SORTED        5           // Play all files of a directory (alph. sorted)
-#define ALL_TRACKS_OF_DIR_RANDOM        6           // Play all files of a directory (randomized)
-#define ALL_TRACKS_OF_DIR_SORTED_LOOP   7           // Play all files of a directory (alph. sorted) in infinite-loop
-#define ALL_TRACKS_OF_DIR_RANDOM_LOOP   9           // Play all files of a directory (randomized) in infinite-loop
-#define WEBSTREAM                       8           // Play webradio-stream
-#define BUSY                            10          // Used if playlist is created
-
-// RFID-modifcation-types
-#define LOCK_BUTTONS_MOD                100         // Locks all buttons and rotary encoder
-#define SLEEP_TIMER_MOD_15              101         // Puts uC into deepsleep after 15 minutes + LED-DIMM
-#define SLEEP_TIMER_MOD_30              102         // Puts uC into deepsleep after 30 minutes + LED-DIMM
-#define SLEEP_TIMER_MOD_60              103         // Puts uC into deepsleep after 60 minutes + LED-DIMM
-#define SLEEP_TIMER_MOD_120             104         // Puts uC into deepsleep after 120 minutes + LED-DIMM
-#define SLEEP_AFTER_END_OF_TRACK        105         // Puts uC into deepsleep after track is finished + LED-DIMM
-#define SLEEP_AFTER_END_OF_PLAYLIST     106         // Puts uC into deepsleep after playlist is finished + LED-DIMM
-#define SLEEP_AFTER_5_TRACKS            107         // Puts uC into deepsleep after five tracks
-#define REPEAT_PLAYLIST                 110         // Changes active playmode to endless-loop (for a playlist)
-#define REPEAT_TRACK                    111         // Changes active playmode to endless-loop (for a single track)
-#define DIMM_LEDS_NIGHTMODE             112         // Changes LED-brightness
-#define VOLUME_DECREASE                 113         // Lautstärke leiser
-#define VOLUME_INCREASE                 114         // Lautstärke lauter
-
-// Repeat-Modes
-#define NO_REPEAT                       0
-#define TRACK                           1
-#define PLAYLIST                        2
-#define TRACK_N_PLAYLIST                3
-
-typedef struct { // Bit field
-    uint8_t playMode:                   4;      // playMode
-    char **playlist;                            // playlist
-    bool repeatCurrentTrack:            1;      // If current track should be looped
-    bool repeatPlaylist:                1;      // If whole playlist should be looped
-    uint16_t currentTrackNumber:        9;      // Current tracknumber
-    uint16_t numberOfTracks:            9;      // Number of tracks in playlist
-    unsigned long startAtFilePos;               // Offset to start play (in bytes)
-    uint8_t currentRelPos:              7;      // Current relative playPosition (in %)
-    bool sleepAfterCurrentTrack:        1;      // If uC should go to sleep after current track
-    bool sleepAfterPlaylist:            1;      // If uC should go to sleep after whole playlist
-    bool saveLastPlayPosition:          1;      // If playposition/current track should be saved (for AUDIOBOOK)
-    char playRfidTag[13];                       // ID of RFID-tag that started playlist
-    bool pausePlay:                     1;      // If pause is active
-    bool trackFinished:                 1;      // If current track is finished
-    bool playlistFinished:              1;      // If whole playlist is finished
-    uint8_t playUntilTrackNumber:       6;      // Number of tracks to play after which uC goes to sleep
-} playProps;
 playProps playProperties;
-
-typedef struct {
-    char nvsKey[13];
-    char nvsEntry[275];
-} nvs_t;
-
-// Configuration of initial values (for the first start) goes here....
-// There's no need to change them here as they can be configured via webinterface
-// Neopixel
-uint8_t initialLedBrightness = 16;                      // Initial brightness of Neopixel
-uint8_t ledBrightness = initialLedBrightness;
-uint8_t nightLedBrightness = 2;                         // Brightness of Neopixel in nightmode
 
 // MQTT
 bool enableMqtt = true;
@@ -239,13 +90,7 @@ static const char backupFile[] PROGMEM = "/backup.txt"; // File is written every
 // HELPER //
 // WiFi
 unsigned long wifiCheckLastTimestamp = 0;
-// Neopixel
-#ifdef NEOPIXEL_ENABLE
-    bool showLedError = false;
-    bool showLedOk = false;
-    bool showPlaylistProgress = false;
-    bool showRewind = false;
-#endif
+
 // MQTT
 #ifdef MQTT_ENABLE
     unsigned long lastOnlineTimestamp = 0;
@@ -314,9 +159,6 @@ static const char restartWebsite[] PROGMEM = "<p>Der Tonuino wird neu gestartet.
 
 
 // Audio/mp3
-#ifdef AC101_ENBALED
-    AC101 ac;
-#endif
 SPIClass spiSD(VSPI);
 TaskHandle_t mp3Play;
 TaskHandle_t rfid;
@@ -347,16 +189,6 @@ IPAddress myIP;
 hw_timer_t *timer = NULL;
 volatile SemaphoreHandle_t timerSemaphore;
 
-// Button-helper
-typedef struct {
-    bool lastState;
-    bool currentState;
-    bool isPressed;
-    bool isReleased;
-    unsigned long lastPressedTimestamp;
-    unsigned long lastReleasedTimestamp;
-} t_button;
-
 #ifdef ROTARY_SWITCH_ENABLE
     t_button buttons[4];
 #else
@@ -373,10 +205,8 @@ QueueHandle_t trackQueue;
 QueueHandle_t trackControlQueue;
 QueueHandle_t rfidCardQueue;
 
-// PN532_HSU pn532hsu(Serial1);
-// PN532 nfc(pn532hsu);
-
-PN532 nfc;
+PN532_HSU pn532hsu(Serial2);
+PN532 nfc(pn532hsu);
 
 // Prototypes
 void accessPointStart(const char *SSID, IPAddress ip, IPAddress netmask);
@@ -389,13 +219,12 @@ void deepSleepManager(void);
 void doButtonActions(void);
 void doRfidCardModifications(const uint32_t mod);
 bool dumpNvsToSd(char *_namespace, char *_destFile);
-bool endsWith (const char *str, const char *suf);
+
 bool fileValid(const char *_fileItem);
 void freeMultiCharArray(char **arr, const uint32_t cnt);
 uint8_t getRepeatMode(void);
-bool isNumber(const char *str);
-void loggerNl(const char *str, const uint8_t logLevel);
-void logger(const char *str, const uint8_t logLevel);
+
+
 #ifdef MQTT_ENABLE
     bool publishMqtt(const char *topic, const char *payload, bool retained);
 #endif
@@ -414,7 +243,7 @@ char ** returnPlaylistFromSD(File _fileOrDirectory);
 void rfidScanner(void *parameter);
 void sleepHandler(void) ;
 void sortPlaylist(const char** arr, int n);
-bool startsWith(const char *str, const char *pre);
+
 String templateProcessor(const String& templ);
 void trackControlToQueueSender(const uint8_t trackCommand);
 void rfidPreferenceLookupHandler (void);
@@ -424,68 +253,6 @@ void volumeHandler(const int32_t _minVolume, const int32_t _maxVolume);
 void volumeToQueueSender(const int32_t _newVolume);
 wl_status_t wifiManager(void);
 
-
-/* Wrapper-Funktion for Serial-logging (with newline) */
-void loggerNl(const char *str, const uint8_t logLevel) {
-  if (serialDebug >= logLevel) {
-    Serial.println(str);
-  }
-}
-
-/* Wrapper-Funktion for Serial-Logging (without newline) */
-void logger(const char *str, const uint8_t logLevel) {
-  if (serialDebug >= logLevel) {
-    Serial.print(str);
-  }
-}
-
-
-int countChars(const char* string, char ch) {
-    int count = 0;
-    int length = strlen(string);
-
-    for (uint8_t i = 0; i < length; i++) {
-        if (string[i] == ch) {
-            count++;
-        }
-    }
-
-    return count;
-}
-
-
-// Used to print content of sd-card (currently not used, maybe later :-))
-/*void printSdContent(File dir, uint16_t allocSize, uint8_t allocCount, char *sdContent, uint8_t depth) {
-    while (true) {
-        File entry = dir.openNextFile();
-        if (!entry) {
-            dir.rewindDirectory();
-            break;
-        }
-
-        if (countChars(entry.name(), '/') > depth+1) {
-            continue;
-        }
-
-        Serial.println(entry.name());
-
-        if ((strlen(sdContent) + strlen(entry.name()) + 2) >= allocCount * allocSize) {
-            sdContent = (char*) realloc(sdContent, ++allocCount * allocSize);
-            Serial.printf("Free heap: %u", ESP.getFreeHeap());
-            Serial.printf("realloc! -%d-\n", allocCount);
-            if (sdContent == NULL) {
-                return;
-            }
-        }
-        strcat(sdContent, stringDelimiter);
-        strcat(sdContent, entry.name());
-
-        if (entry.isDirectory()) {
-            printSdContent(entry, allocSize, allocCount, sdContent, depth);
-        }
-        entry.close();
-    }
-}*/
 
 void IRAM_ATTR onTimer() {
   xSemaphoreGiveFromISR(timerSemaphore, NULL);
@@ -498,6 +265,17 @@ void buttonHandler() {
         if (lockControls) {
             return;
         }
+
+#ifdef TOUCH_BUTTONS_ENABLE
+        buttons[0].currentState = touchRead(NEXT_BUTTON) > NEXT_BUTTON_THRESHOLD;
+        buttons[1].currentState = touchRead(PREVIOUS_BUTTON) > PREVIOUS_BUTTON_THRESHOLD;
+        buttons[2].currentState = touchRead(PAUSEPLAY_BUTTON) > PAUSEPLAY_BUTTON_THRESHOLD; 
+#else
+        buttons[0].currentState = digitalRead(NEXT_BUTTON);
+        buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
+        buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
+#endif
+
         unsigned long currentTimestamp = millis();
 
         // uint16_t tv = touchRead(NEXT_BUTTON);
@@ -506,9 +284,9 @@ void buttonHandler() {
         // Serial.print('_');
 
         // buttons[0].currentState = (tv > 20);
-        buttons[0].currentState = digitalRead(NEXT_BUTTON);
-        buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
-        buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
+        // buttons[0].currentState = digitalRead(NEXT_BUTTON);
+        // buttons[1].currentState = digitalRead(PREVIOUS_BUTTON);
+        // buttons[2].currentState = digitalRead(PAUSEPLAY_BUTTON);
 
 #ifdef ROTARY_SWITCH_ENABLE
         buttons[3].currentState = digitalRead(DREHENCODER_BUTTON);
@@ -530,10 +308,23 @@ void buttonHandler() {
 }
 
 
+bool buttonLongPressed(uint8_t index)
+{
+    return buttons[index].isPressed && 
+        buttons[index].lastReleasedTimestamp > buttons[index].lastPressedTimestamp &&
+        buttons[index].lastReleasedTimestamp - buttons[index].lastPressedTimestamp >= intervalToLongPress;
+}
+
 // Do corresponding actions for all buttons
 void doButtonActions(void) {
     if (lockControls) {
         return; // Avoid button-handling if buttons are locked
+    }
+
+    if(buttonLongPressed(0) && buttonLongPressed(1) && buttonLongPressed(2)) {
+        Serial.println("Restart ESP32 ...");
+        Serial.flush();
+        ESP.restart();
     }
 
     for (uint8_t i=0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
@@ -591,6 +382,9 @@ void doButtonActions(void) {
     }
 }
 
+void callback(){
+  //placeholder callback function
+}
 
 /* Wrapper-functions for MQTT-publish */
 #ifdef MQTT_ENABLE
@@ -919,32 +713,6 @@ uint8_t getRepeatMode(void) {
     }
 }
 
-
-// Checks if string starts with prefix
-// Returns true if so
-bool startsWith(const char *str, const char *pre) {
-    if (strlen(pre) < 1) {
-      return false;
-    }
-
-    return !strncmp(str, pre, strlen(pre));
-}
-
-
-// Checks if string ends with suffix
-// Returns true if so
-bool endsWith (const char *str, const char *suf) {
-    const char *a = str + strlen(str);
-    const char *b = suf + strlen(suf);
-
-    while (a != str && b != suf) {
-        if (*--a != *--b) break;
-    }
-
-    return b == suf && *a == *b;
-}
-
-
 // Release previously allocated memory
 void freeMultiCharArray(char **arr, const uint32_t cnt) {
     for (uint32_t i=0; i<=cnt; i++) {
@@ -1176,64 +944,28 @@ size_t nvsRfidWriteWrapper (const char *_rfidCardId, const char *_track, const u
     return prefsRfid.putString(_rfidCardId, prefBuf);
 }
 
-bool isHeadphoneDetected()
-{
-    return !digitalRead(HEADPHONE_DETECT_PIN);
-}
-
 // Function to play music as task
 void playAudio(void *parameter) {
     static Audio audio;
     audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
 
-
-#ifdef AC101_ENBALED
-    Serial.printf("Connect to AC101 codec... ");
-    while (not ac.begin(IIC_DATA, IIC_CLK))
-    {
-        Serial.printf("Failed!\n");
-        delay(1000);
-    }
-    Serial.printf("OK\n");
-
-    if(isHeadphoneDetected())
-    {
-        ac.SetVolumeSpeaker(0);
-        ac.SetVolumeHeadphone(initVolume*3);  
-    } else {
-        ac.SetVolumeSpeaker(initVolume*3);
-        ac.SetVolumeHeadphone(0);
-    }
-    audio.setVolume(11);
-// ac.SetMode
-    // ac.DumpRegisters();
-#else
     audio.setVolume(initVolume);
-#endif
 
     uint8_t currentVolume;
     static BaseType_t trackQStatus;
     static uint8_t trackCommand = 0;
 
     for (;;) {
+        if(gotoSleep)
+        {
+            break;
+        }
         if (xQueueReceive(volumeQueue, &currentVolume, 0) == pdPASS ) {
             snprintf(logBuf, sizeof(logBuf) / sizeof(logBuf[0]), "%s: %d", (char *) FPSTR(newLoudnessReceivedQueue), currentVolume);
             loggerNl(logBuf, LOGLEVEL_INFO);
 
-            #ifdef AC101_ENBALED
-                if(isHeadphoneDetected())
-                {
-                    ac.SetVolumeSpeaker(0);
-                    ac.SetVolumeHeadphone(currentVolume*3);  
-                } else {
-                    ac.SetVolumeSpeaker(currentVolume*3);
-                    ac.SetVolumeHeadphone(0);
-                }
-            #else
-                audio.setVolume(currentVolume);
-            #endif
+            audio.setVolume(currentVolume);
 
-            
             #ifdef MQTT_ENABLE
                 publishMqtt((char *) FPSTR(topicLoudnessState), currentVolume, false);
             #endif
@@ -1559,6 +1291,11 @@ void playAudio(void *parameter) {
 
         esp_task_wdt_reset();                                    // Don't forget to feed the dog!
     }
+
+    audio.stopSong();
+    audio.setVolume(0);
+
+    logger("audio task died!", LOGLEVEL_INFO);
     vTaskDelete(NULL);
 }
 
@@ -1639,25 +1376,35 @@ void rfidScanner(void *parameter) {
     byte uidLastLength = 0;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
 
     for (;;) {
+
+        if (gotoSleep)
+        {
+            Serial.println("go sleep rfid");
+            // Serial1.end();
+            break;
+        }
+
         esp_task_wdt_reset();
         vTaskDelay(10);
-        if ((millis() - lastRfidCheckTimestamp) >= 300) {
+        if ((millis() - lastRfidCheckTimestamp) >= 1500) {
             lastRfidCheckTimestamp = millis();
             // Reset the loop if no new card is present on the sensor/reader. This saves the entire process when idle.
 
+            nfc.wakeup();
+            delay(1);
             // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
             // 'uid' will be populated with the UID, and uidLength will indicate
             // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
-            // if (!nfc.ReadPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 200)) {
-
-            eCardType e_CardType;
-
-            if (!nfc.ReadPassiveTargetID(uid, &uidLength, &e_CardType)) {
+            if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 200)) {
                 Serial.print("-");
-                // if(uidLastLength > 0)
-                //     uidLastLength = 0; 
+                if(uidLastLength > 0)
+                    uidLastLength = 0; 
+
+                nfc.powerDownMode();
                 continue;
             }
+
+            nfc.powerDownMode();
 
             // not a valid uid length, no card
             if (uidLength < 4) {
@@ -1707,304 +1454,6 @@ void rfidScanner(void *parameter) {
 }
 #endif
 
-// This task handles everything for Neopixel-visualisation
-#ifdef NEOPIXEL_ENABLE
-
-
-// Switches Neopixel-addressing from clockwise to counter clockwise (and vice versa)
-uint8_t ledAddress(uint8_t number) {
-    #ifdef NEOPIXEL_REVERSE_ROTATION
-        return NUM_LEDS-1-number;
-    #else
-        return number;
-    #endif
-}
-
-
-void showLed(void *parameter) {
-    static uint8_t hlastVolume = currentVolume;
-    static uint8_t lastPos = playProperties.currentRelPos;
-    static bool lastPlayState = false;
-    static bool lastLockState = false;
-    static bool ledBusyShown = false;
-    static bool notificationShown = false;
-    static bool volumeChangeShown = false;
-    static bool showEvenError = false;
-    static uint8_t ledPosWebstream = 0;
-    static uint8_t ledSwitchInterval = 5; // time in secs (webstream-only)
-    static uint8_t webstreamColor = 0;
-    static unsigned long lastSwitchTimestamp = 0;
-    static bool redrawProgress = false;
-    static uint8_t lastLedBrightness = ledBrightness;
-
-    static CRGB leds[NUM_LEDS];
-    FastLED.addLeds<CHIPSET , LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalSMD5050 );
-    FastLED.setBrightness(ledBrightness);
-
-    for (;;) {
-        if (!bootComplete) {                    // Rotates orange unless boot isn't complete
-            FastLED.clear();
-            for (uint8_t led = 0; led < NUM_LEDS; led++) {
-                if (showEvenError) {
-                    if (ledAddress(led) % 2 == 0) {
-                        if (millis() <= 10000) {
-                            leds[ledAddress(led)] = CRGB::Orange;
-                        } else {
-                            leds[ledAddress(led)] = CRGB::Red;
-                        }
-                    }
-                } else {
-                    if (millis() >= 10000) {    // Flashes red after 10s (will remain forever if SD cannot be mounted)
-                       leds[ledAddress(led)] = CRGB::Red;
-                    } else {
-                        if (ledAddress(led) % 2 == 1) {
-                            leds[ledAddress(led)] = CRGB::Orange;
-                        }
-                    }
-                }
-            }
-            FastLED.show();
-            showEvenError = !showEvenError;
-            vTaskDelay(portTICK_RATE_MS*500);
-            esp_task_wdt_reset();
-            continue;
-        }
-
-        if (lastLedBrightness != ledBrightness) {
-            FastLED.setBrightness(ledBrightness);
-            lastLedBrightness = ledBrightness;
-        }
-
-        if (!buttons[3].currentState) {
-            FastLED.clear();
-            for (uint8_t led = 0; led < NUM_LEDS; led++) {
-                leds[ledAddress(led)] = CRGB::Red;
-                if (buttons[3].currentState) {
-                    FastLED.clear();
-                    FastLED.show();
-                    delay(5);
-                    deepSleepManager();
-                    break;
-                }
-                FastLED.show();
-                vTaskDelay(intervalToLongPress / NUM_LEDS * portTICK_RATE_MS);
-            }
-        }
-
-        if (showLedError) {             // If error occured (e.g. RFID-modification not accepted)
-            showLedError = false;
-            notificationShown = true;
-            FastLED.clear();
-
-            for (uint8_t led = 0; led < NUM_LEDS; led++) {
-                leds[ledAddress(led)] = CRGB::Red;
-            }
-            FastLED.show();
-            vTaskDelay(portTICK_RATE_MS * 200);
-        }
-
-        if (showLedOk) {             // If action was accepted
-            showLedOk = false;
-            notificationShown = true;
-            FastLED.clear();
-
-            for (uint8_t led = 0; led < NUM_LEDS; led++) {
-                leds[ledAddress(led)] = CRGB::Green;
-            }
-            FastLED.show();
-            vTaskDelay(portTICK_RATE_MS * 400);
-        }
-
-        if (hlastVolume != currentVolume) {         // If volume has been changed
-            uint8_t numLedsToLight = map(currentVolume, 0, maxVolume, 0, NUM_LEDS);
-            hlastVolume = currentVolume;
-            volumeChangeShown = true;
-            FastLED.clear();
-
-            for (int led = 0; led < numLedsToLight; led++) {     // (Inverse) color-gradient from green (85) back to (still) red (245) using unsigned-cast
-                leds[ledAddress(led)].setHue((uint8_t) (85 - ((double) 95 / NUM_LEDS) * led));
-            }
-            FastLED.show();
-
-            for (uint8_t i=0; i<=50; i++) {
-                if (hlastVolume != currentVolume || showLedError || showLedOk || !buttons[3].currentState) {
-                    if (hlastVolume != currentVolume) {
-                        volumeChangeShown = false;
-                    }
-                    break;
-                }
-
-                vTaskDelay(portTICK_RATE_MS*20);
-            }
-        }
-
-        if (showRewind) {
-            showRewind = false;
-            for (uint8_t i=NUM_LEDS-1; i>0; i--) {
-                leds[ledAddress(i)] = CRGB::Black;
-                FastLED.show();
-                if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                    break;
-                } else {
-                    vTaskDelay(portTICK_RATE_MS*30);
-                }
-            }
-        }
-
-        if (showPlaylistProgress) {
-            showPlaylistProgress = false;
-            if (playProperties.numberOfTracks > 1 && playProperties.currentTrackNumber < playProperties.numberOfTracks) {
-                uint8_t numLedsToLight = map(playProperties.currentTrackNumber, 0, playProperties.numberOfTracks-1, 0, NUM_LEDS);
-                FastLED.clear();
-                for (uint8_t i=0; i < numLedsToLight; i++) {
-                    leds[ledAddress(i)] = CRGB::Blue;
-                    FastLED.show();
-                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                        break;
-                    } else {
-                        vTaskDelay(portTICK_RATE_MS*30);
-                    }
-                }
-
-                for (uint8_t i=0; i<=100; i++) {
-                   if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                        break;
-                    } else {
-                        vTaskDelay(portTICK_RATE_MS*15);
-                    }
-                }
-
-                for (uint8_t i=numLedsToLight; i>0; i--) {
-                    leds[ledAddress(i)-1] = CRGB::Black;
-                    FastLED.show();
-                    if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || !buttons[3].currentState) {
-                        break;
-                    } else {
-                        vTaskDelay(portTICK_RATE_MS*30);
-                    }
-                }
-            }
-        }
-
-        switch (playProperties.playMode) {
-            case NO_PLAYLIST:                   // If no playlist is active (idle)
-                if (hlastVolume == currentVolume && lastLedBrightness == ledBrightness) {
-                    for (uint8_t i=0; i<NUM_LEDS; i++) {
-                        FastLED.clear();
-                        if (ledAddress(i) == 0) {
-                            leds[0] = CRGB::White;
-                            leds[NUM_LEDS/4] = CRGB::White;
-                            leds[NUM_LEDS/2] = CRGB::White;
-                            leds[NUM_LEDS/4*3] = CRGB::White;
-                        } else {
-                            leds[ledAddress(i) % NUM_LEDS] = CRGB::White;
-                            leds[(ledAddress(i)+NUM_LEDS/4) % NUM_LEDS] = CRGB::White;
-                            leds[(ledAddress(i)+NUM_LEDS/2) % NUM_LEDS] = CRGB::White;
-                            leds[(ledAddress(i)+NUM_LEDS/4*3) % NUM_LEDS] = CRGB::White;
-                        }
-                        FastLED.show();
-                        for (uint8_t i=0; i<=50; i++) {
-                            if (hlastVolume != currentVolume || lastLedBrightness != ledBrightness || showLedError || showLedOk || playProperties.playMode != NO_PLAYLIST || !buttons[3].currentState) {
-                                break;
-                            } else {
-                                vTaskDelay(portTICK_RATE_MS * 10);
-                            }
-                        }
-                    }
-                }
-                break;
-
-            case BUSY:                          // If uC is busy (parsing SD-card)
-                ledBusyShown = true;
-                for (uint8_t i=0; i < NUM_LEDS; i++) {
-                    FastLED.clear();
-                    if (ledAddress(i) == 0) {
-                        leds[0] = CRGB::BlueViolet;
-                        leds[NUM_LEDS/4] = CRGB::BlueViolet;
-                        leds[NUM_LEDS/2] = CRGB::BlueViolet;
-                        leds[NUM_LEDS/4*3] = CRGB::BlueViolet;
-                    } else {
-                        leds[ledAddress(i) % NUM_LEDS] = CRGB::BlueViolet;
-                        leds[(ledAddress(i)+NUM_LEDS/4) % NUM_LEDS] = CRGB::BlueViolet;
-                        leds[(ledAddress(i)+NUM_LEDS/2) % NUM_LEDS] = CRGB::BlueViolet;
-                        leds[(ledAddress(i)+NUM_LEDS/4*3) % NUM_LEDS] = CRGB::BlueViolet;
-                    }
-                    FastLED.show();
-                    if (playProperties.playMode != BUSY) {
-                        break;
-                    }
-                    vTaskDelay(portTICK_RATE_MS * 50);
-                }
-                break;
-
-            default:                            // If playlist is active (doesn't matter which type)
-                if (!playProperties.playlistFinished) {
-                    if (playProperties.pausePlay != lastPlayState || lockControls != lastLockState || notificationShown || ledBusyShown || volumeChangeShown || !buttons[3].currentState) {
-                        lastPlayState = playProperties.pausePlay;
-                        lastLockState = lockControls;
-                        notificationShown = false;
-                        volumeChangeShown = false;
-                        if (ledBusyShown) {
-                            ledBusyShown = false;
-                            FastLED.clear();
-                            FastLED.show();
-                        }
-                        redrawProgress = true;
-                    }
-
-                    if (playProperties.playMode != WEBSTREAM) {
-                        if (playProperties.currentRelPos != lastPos || redrawProgress) {
-                            redrawProgress = false;
-                            lastPos = playProperties.currentRelPos;
-                            uint8_t numLedsToLight = map(playProperties.currentRelPos, 0, 98, 0, NUM_LEDS);
-                            FastLED.clear();
-                            for (uint8_t led = 0; led < numLedsToLight; led++) {
-                                if (lockControls) {
-                                    leds[ledAddress(led)] = CRGB::Red;
-                                } else if (!playProperties.pausePlay) { // Hue-rainbow
-                                    leds[ledAddress(led)].setHue((uint8_t) (85 - ((double) 95 / NUM_LEDS) * led));
-                                } else if (playProperties.pausePlay) {
-                                    leds[ledAddress(led) % NUM_LEDS] = CRGB::Orange;
-                                    leds[(ledAddress(led)+NUM_LEDS/4) % NUM_LEDS] = CRGB::Orange;
-                                    leds[(ledAddress(led)+NUM_LEDS/2) % NUM_LEDS] = CRGB::Orange;
-                                    leds[(ledAddress(led)+NUM_LEDS/4*3) % NUM_LEDS] = CRGB::Orange;
-                                    break;
-                                }
-                            }
-                        }
-                    } else { // ... but do things a little bit different for Webstream as there's no progress available
-                        if (lastSwitchTimestamp == 0 || (millis() - lastSwitchTimestamp >= ledSwitchInterval * 1000) || redrawProgress) {
-                            redrawProgress = false;
-                            lastSwitchTimestamp = millis();
-                            FastLED.clear();
-                            if (ledPosWebstream + 1 < NUM_LEDS) {
-                                ledPosWebstream++;
-                            } else {
-                                ledPosWebstream = 0;
-                            }
-                            if (lockControls) {
-                                leds[ledAddress(ledPosWebstream)] = CRGB::Red;
-                                leds[(ledAddress(ledPosWebstream)+NUM_LEDS/2) % NUM_LEDS] = CRGB::Red;
-                            } else if (!playProperties.pausePlay) {
-                                leds[ledAddress(ledPosWebstream)].setHue(webstreamColor);
-                                leds[(ledAddress(ledPosWebstream)+NUM_LEDS/2) % NUM_LEDS].setHue(webstreamColor++);
-                            } else if (playProperties.pausePlay) {
-                                leds[ledAddress(ledPosWebstream)] = CRGB::Orange;
-                                leds[(ledAddress(ledPosWebstream)+NUM_LEDS/2) % NUM_LEDS] = CRGB::Orange;
-                            }
-                        }
-                    }
-                    FastLED.show();
-                    vTaskDelay(portTICK_RATE_MS * 5);
-                }
-        }
-        esp_task_wdt_reset();
-    }
-    vTaskDelete(NULL);
-}
-#endif
-
-
 // Sets deep-sleep-flag if max. inactivity-time is reached
 void sleepHandler(void) {
     unsigned long m = millis();
@@ -2025,19 +1474,35 @@ void deepSleepManager(void) {
     if (gotoSleep) {
         loggerNl((char *) FPSTR(goToSleepNow), LOGLEVEL_NOTICE);
         Serial.flush();
+
+        delay(1000);
+
         #ifdef MQTT_ENABLE
             publishMqtt((char *) FPSTR(topicState), "Offline", false);
             publishMqtt((char *) FPSTR(topicTrackState), "---", false);
             MQTTclient.disconnect();
         #endif
         #ifdef NEOPIXEL_ENABLE
-            FastLED.clear();
+            vTaskDelay(portTICK_RATE_MS * 1000);
+            FastLED.clear(true);
             FastLED.show();
         #endif
-        /*SPI.end();
-        spiSD.end();*/
+
+        nfc.powerDownMode();
+
+        SPI.end();
+        spiSD.end();
+
         digitalWrite(POWER, LOW);
         delay(200);
+
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        btStop();
+
+        esp_wifi_stop();
+        esp_bt_controller_disable();
+
         esp_deep_sleep_start();
     }
 }
@@ -2106,7 +1571,7 @@ void trackQueueDispatcher(const char *_itemToPlay, const uint32_t _lastPlayPos, 
     playProperties.startAtFilePos = _lastPlayPos;
     playProperties.currentTrackNumber = _trackLastPlayed;
     char **musicFiles;
-    playProperties.playMode = BUSY;     // Show @Neopixel, if uC is busy with creating playlist
+    playProperties.playMode = PLAYER_BUSY;     // Show @Neopixel, if uC is busy with creating playlist
 
     #ifdef MQTT_ENABLE
         publishMqtt((char *) FPSTR(topicLedBrightnessState), 0, false);
@@ -2750,6 +2215,9 @@ wl_status_t wifiManager(void) {
         const char *_ssid = strSSID.c_str();
         const char *_pwd = strPassword.c_str();
 
+        // WiFi.mode (WIFI_STA);
+        esp_wifi_set_ps (WIFI_PS_MAX_MODEM);
+
         // ...and create a connection with it. If not successful, an access-point will is opened
         WiFi.begin(_ssid, _pwd);
 
@@ -2996,25 +2464,6 @@ void onWebsocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsE
     }
 }
 
-
-bool isNumber(const char *str) {
-  byte i = 0;
-
-  while (*(str + i) != '\0') {
-    if (!isdigit(*(str + i++))) {
-      return false;
-    }
-  }
-
-  if (i>0) {
-      return true;
-  } else {
-      return false;
-  }
-
-}
-
-
 // Dumps all RFID-entries from NVS into a file on SD-card
 bool dumpNvsToSd(char *_namespace, char *_destFile) {
     esp_partition_iterator_t pi;                // Iterator for find
@@ -3128,8 +2577,8 @@ void setup() {
     Serial.println("\r\nReset");
     Serial.printf_P(PSTR("Free mem=%d\n"), ESP.getFreeHeap());
 
-    // nfc.InitI2C(0);
-    // nfc.SetDebugLevel(3);
+    esp_bt_controller_disable();
+    adc_power_off();
 
     delay(10);
 
@@ -3137,22 +2586,7 @@ void setup() {
     pinMode(POWER, OUTPUT);
     digitalWrite(POWER, HIGH);
 
-    // uint32_t versiondata = nfc.GetFirmwareVersion();
-    // if (! versiondata) {
-    //     Serial.print("Didn't find PN53x board");
-    //     while (1); // halt
-    // }
-
-    // // Got ok data, print it out!
-    // Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
-    // Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
-    // Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
-
-    // nfc.setPassiveActivationRetries(0xFE);
-
-
-
-
+    // pinMode(2, INPUT);
 
     prefsRfid.begin((char *) FPSTR(prefsRfidNamespace));
     prefsSettings.begin((char *) FPSTR(prefsSettingsNamespace));
@@ -3197,14 +2631,12 @@ void setup() {
     pinMode(SPISD_CS, OUTPUT);
     digitalWrite(SPISD_CS, HIGH);
     spiSD.begin(SPISD_SCK, SPISD_MISO, SPISD_MOSI, SPISD_CS);
-    spiSD.setFrequency(1000000);
+    // spiSD.setFrequency(1000000);
+    spiSD.setFrequency(2500000);
     while (!SD.begin(SPISD_CS, spiSD)) {
         loggerNl((char *) FPSTR(unableToMountSd), LOGLEVEL_ERROR);
         delay(500);
     }
-
-    pinMode(HEADPHONE_DETECT_PIN, INPUT);
-    attachInterrupt(HEADPHONE_DETECT_PIN, &onHeadphoneDetect, CHANGE);
 
     // Create queues
     volumeQueue = xQueueCreate(1, sizeof(int));
@@ -3337,7 +2769,6 @@ void setup() {
         loggerNl(logBuf, LOGLEVEL_INFO);
     }
 
-
     // Create 1000Hz-HW-Timer (currently only used for buttons)
     timerSemaphore = xSemaphoreCreateBinary();
     timer = timerBegin(0, 240, true);           // Prescaler: CPU-clock in MHz
@@ -3346,29 +2777,31 @@ void setup() {
     timerAlarmEnable(timer);
 
 
-
-
-
     nfc.begin();
-    // Set the max number of retry attempts to read from a card.
-    // This prevents us from waiting forever for a card, which is the default behaviour of the PN532.
-    while (!nfc.SetPassiveActivationRetries())
-    {
-        Serial.print("SetPassiveActivationRetries error!");
-        // while (1); // halt
-    }
 
-    // configure board to read RFID tags
-    if (!nfc.SamConfig())
-    {
-        Serial.println("Unable to write PN532 config");
+    uint32_t versiondata = nfc.getFirmwareVersion();
+
+    if (! versiondata) {
+        // #ifdef NDEF_USE_SERIAL
+        Serial.print(F("Didn't find PN53x board"));
+        // #endif
         while (1); // halt
     }
 
-    delay(4);
-    loggerNl((char *) FPSTR(rfidScannerReady), LOGLEVEL_DEBUG);
+    if (true) {
+        // #ifdef NDEF_USE_SERIAL
+        Serial.print(F("Found chip PN5")); Serial.println((versiondata >> 24) & 0xFF, HEX);
+        Serial.print(F("Firmware ver. ")); Serial.print((versiondata >> 16) & 0xFF, DEC);
+        Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
+        // #endif
+    }
 
+    nfc.setPassiveActivationRetries(0x10);
 
+    // configure board to read RFID tags
+    nfc.SAMConfig();
+
+    nfc.powerDownMode();
 
     // Create tasks
     xTaskCreatePinnedToCore(
@@ -3394,11 +2827,46 @@ void setup() {
 #ifdef ROTARY_ENCODER_ENABLED
     esp_sleep_enable_ext0_wakeup((gpio_num_t) DREHENCODER_BUTTON, 0);
 #endif
+
+#ifdef TOUCH_BUTTONS_ENABLE
+    
+
+    pinMode(PAUSEPLAY_BUTTON, INPUT);
+    pinMode(NEXT_BUTTON, INPUT);
+    pinMode(PREVIOUS_BUTTON, INPUT);
+
+    touchAttachInterrupt(PAUSEPLAY_BUTTON, callback, PAUSEPLAY_BUTTON_THRESHOLD);
+    touchAttachInterrupt(NEXT_BUTTON, callback, NEXT_BUTTON_THRESHOLD);
+    touchAttachInterrupt(PREVIOUS_BUTTON, callback, PREVIOUS_BUTTON_THRESHOLD);
+
+    esp_sleep_enable_touchpad_wakeup();
+#else
+    esp_sleep_enable_ext0_wakeup((gpio_num_t) PAUSEPLAY_BUTTON, 0);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t) NEXT_BUTTON, 0);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t) PREVIOUS_BUTTON, 0);
+
     // Activate internal pullups for all buttons
     pinMode(PAUSEPLAY_BUTTON, INPUT_PULLUP);
-    // pinMode(NEXT_BUTTON, INPUT_PULLUP);
     pinMode(NEXT_BUTTON, INPUT_PULLUP);
     pinMode(PREVIOUS_BUTTON, INPUT_PULLUP);
+#endif
+
+
+    // for (size_t i = 0; i < 1000; i++)
+    // {
+    //     Serial.print(touchRead(PAUSEPLAY_BUTTON));
+    //     Serial.print("-");
+    //     Serial.print(touchRead(NEXT_BUTTON));
+    //     Serial.print("-");
+    //     Serial.print(touchRead(PREVIOUS_BUTTON));
+    //     Serial.println();
+
+    //     delay(50);
+    // }
+    
+
+
+
 
 #ifdef ROTARY_SWITCH_ENABLE
     pinMode(DREHENCODER_BUTTON, INPUT_PULLUP);
