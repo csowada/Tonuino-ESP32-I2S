@@ -70,7 +70,7 @@ uint8_t const cardIdSize = 4;                           // RFID
 // Volume
 uint8_t maxVolume = 21;                                 // Maximum volume that can be adjusted
 uint8_t minVolume = 0;                                  // Lowest volume that can be adjusted
-uint8_t initVolume = 3;                                 // 0...21 (If not found in NVS, this one will be taken)
+uint8_t initVolume = 4;                                 // 0...21 (If not found in NVS, this one will be taken)
 // Sleep
 uint8_t maxInactivityTime = 10;                         // Time in minutes, after uC is put to deep sleep because of inactivity
 uint8_t sleepTimer = 30;                                // Sleep timer in minutes that can be optionally used (and modified later via MQTT or RFID)
